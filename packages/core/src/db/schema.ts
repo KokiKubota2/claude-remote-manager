@@ -9,6 +9,8 @@ export const jobs = sqliteTable(
     title: text("title").notNull(),
     task: text("task").notNull(),
     mode: text("mode").notNull(),
+    workspaceMode: text("workspace_mode").notNull().default("worktree"),
+    optionsJson: text("options_json").notNull().default("{}"),
 
     status: text("status").notNull(),
 
