@@ -5,4 +5,5 @@ export * from "./git/index";
 export * from "./jobs/index";
 export * from "./logging/logger";
 export * from "./security/index";
+export * from "./slack/index";
 export * from "./types/index";
