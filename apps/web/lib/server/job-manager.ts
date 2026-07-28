@@ -8,6 +8,7 @@ import {
   type PermissionHandler,
 } from "@claude-remote/core";
 import { services } from "./services";
+import { buildSlackHandlers, slackBridge, startSlackBridge } from "./slack";
 
 const log = getLogger("web-job-manager");
 
@@ -32,6 +33,7 @@ export function jobManager(): JobManager {
       env.CLAUDE_ADAPTER === "mock"
         ? new MockClaudeAdapter()
         : new SdkClaudeAdapter(env.CLAUDE_JOB_MODEL ? { model: env.CLAUDE_JOB_MODEL } : {});
+    const slack = slackBridge();
     const manager = new JobManager({
       db,
       registry,
@@ -40,10 +42,38 @@ export function jobManager(): JobManager {
       permissionHandler: denyByDefault,
       maxConcurrentJobs: env.MAX_CONCURRENT_JOBS,
       maxConcurrentJobsPerProject: env.MAX_CONCURRENT_JOBS_PER_PROJECT,
+      // ジョブのライフサイクルをSlackへ通知する(§15)
+      onJobEvent: (event) => {
+        void (async () => {
+          switch (event.type) {
+            case "job_started":
+              await slack.postJobStarted(event.job);
+              break;
+            case "job_completed":
+              await slack.postJobCompleted(event.job, event.resultText);
+              break;
+            case "job_failed":
+              await slack.postJobFailed(event.job, event.error);
+              break;
+            case "job_cancelled":
+              await slack.postJobCancelled(event.job);
+              break;
+            default:
+              break;
+          }
+        })().catch((e) => log.error({ err: (e as Error).message }, "slack notify failed"));
+      },
     });
     manager.start();
-    log.info({ adapter: adapter.kind }, "job manager initialized");
     globalStore.__crmJobManager = manager;
+
+    void startSlackBridge(
+      buildSlackHandlers({
+        sendMessage: (jobId, message) => manager.sendMessage(jobId, message),
+        interrupt: (jobId) => manager.interruptIfActive(jobId),
+      }),
+    );
+    log.info({ adapter: adapter.kind, slack: slack.kind }, "job manager initialized");
   }
   return globalStore.__crmJobManager;
 }

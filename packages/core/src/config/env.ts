@@ -14,6 +14,12 @@ const envSchema = z.object({
   WEB_HOST: z.string().default("127.0.0.1"),
   WEB_PORT: z.coerce.number().int().min(1).max(65535).default(32146),
   WEB_AUTH_TOKEN: z.string().min(32, "WEB_AUTH_TOKEN must be at least 32 characters"),
+  /** Slack通知のリンク先(例: http://macbook-name:32146)。未設定ならリンクなし */
+  WEB_BASE_URL: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
 
   DATABASE_PATH: z.string().default("./data/claude-remote.sqlite").transform(expandPath),
 
