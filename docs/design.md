@@ -2,6 +2,10 @@
 
 ## スマートフォンからClaude Codeタスクを起動・監視・操作するシステム設計書
 
+> 改訂 2026-07-28: Phase 0 成立性調査(`docs/capability-report.md`)の結果を反映。
+> 主な変更: Claude 連携の主経路を Claude Agent SDK(`canUseTool`)に変更、
+> Hook CLI・内部Hook HTTP API・tmuxアダプタを削除、Remote Controlをオプション機能に格下げ。
+
 ---
 
 # 1. 概要
@@ -115,7 +119,9 @@ pnpm add zod
 
 スマートフォンでボタンを押すと、Claude Codeへ許可または拒否を返す。
 
-許可要求は可能な限りClaude Codeの`PermissionRequest` Hookを使用して処理する。
+許可要求は Claude Agent SDK の `canUseTool` コールバックで処理する。
+(Phase 0 実測により、headless 起動では `PermissionRequest` Hook が発火しないことを確認済み。
+詳細は `docs/capability-report.md` §6・§13 を参照。)
 
 ---
 
@@ -286,17 +292,16 @@ SSH接続は通常運用では使用しない。
 │  │ Job Manager                       │  │
 │  │ Repository Registry               │  │
 │  │ Claude Adapter                    │  │
-│  │ Hook Receiver                     │  │
 │  │ Git Worktree Manager              │  │
 │  │ SQLite                            │  │
 │  └──────────────┬────────────────────┘  │
-│                 │                       │
+│                 │ Agent SDK             │
 │      ┌──────────▼──────────┐            │
 │      │ Claude Code         │            │
 │      │                     │            │
-│      │ ・Remote Control    │            │
-│      │ ・Hooks             │            │
-│      │ ・CLI process       │            │
+│      │ ・Agent SDK         │            │
+│      │ ・canUseTool        │            │
+│      │ ・Remote Control(任意)│          │
 │      └──────────┬──────────┘            │
 │                 │                       │
 │      ┌──────────▼──────────┐            │
@@ -379,6 +384,10 @@ Slack
 - Block Kit
 - Modal
 
+Claude
+- @anthropic-ai/claude-agent-sdk
+- claude CLI(SDKが内部で使用)
+
 Database
 - SQLite
 - better-sqlite3
@@ -394,7 +403,6 @@ Process management
 - Node.js child_process
 - execFile
 - spawn
-- 必要に応じてtmux
 
 Git
 - git CLI
@@ -515,23 +523,32 @@ interface ClaudeAdapter {
 }
 ```
 
-実装候補：
+実装：
 
 ```text
-RemoteControlClaudeAdapter
-ProcessClaudeAdapter
-TmuxClaudeAdapter
+SdkClaudeAdapter    Claude Agent SDK(主経路)
+MockClaudeAdapter   テスト用
 ```
 
-優先順位：
+主経路は Claude Agent SDK(`@anthropic-ai/claude-agent-sdk`)とする。
 
-1. Remote Controlが現在の環境で利用可能なら使用
-2. CLIプロセスを直接spawnして管理
-3. 対話入力が必要な場合はtmuxまたはPTYを使用
+* `query()` でジョブを起動する(プロセス生成・stream-json制御はSDKが内包)
+* `canUseTool` コールバックで許可要求を受け取り、Slack回答で解決する
+* `options.resume` + セッションIDで追加指示を送る
+* `interrupt()` で停止する
 
-Remote ControlのCLIオプションやセッションURL取得方法は、実装時点のClaude Code公式仕様とローカルCLIのヘルプで確認すること。
+Phase 0 実測(v2.1.220)で確認済みの根拠:
 
-存在を確認せずにオプションを決め打ちしない。
+* headless(`--print`)起動では PermissionRequest Hook が発火せず、許可が必要なツールは即拒否される
+* 対話モード(PTY)は worktree ごとに workspace trust ダイアログが出るため自動化に不向き
+* SDK の `canUseTool` はこの両問題を回避できる唯一の公式経路
+
+縮退運用(SDKが利用できない場合):
+
+* `claude -p --resume <sessionId>` の連鎖で対話継続のみ提供する
+* 許可制御は settings.json の allow/deny ルールで事前定義できる範囲に限定し、動的な許可要求は「拒否して質問として通知」へ倒す
+
+tmux / PTY アダプタは実装しない(capability-report §14-2)。
 
 ---
 
@@ -541,7 +558,7 @@ Remote ControlのCLIオプションやセッションURL取得方法は、実装
 
 * Socket Mode接続
 * ジョブ開始通知
-* PermissionRequest通知
+* 許可要求通知(canUseTool)
 * 判断待ち通知
 * 完了通知
 * エラー通知
@@ -557,38 +574,22 @@ Mac側にSlack用の公開HTTP Request URLを作らない。
 
 ---
 
-## 8.6 Claude Code Hook CLI
+## 8.6 Claude イベント処理(Hook CLI は廃止)
 
-Claude Code Hooksから呼び出される短命CLI。
+旧設計の「Hook CLI + localhost HTTP の Hook Receiver」は廃止する。
 
-例：
+Agent SDK を使う場合、許可要求・応答完了・通知はすべて Job Manager プロセス内の
+コールバック/メッセージストリームとして受け取れるため、プロセス間通信が不要になる。
 
-```bash
-node /absolute/path/dist/hook-cli.js permission-request
-node /absolute/path/dist/hook-cli.js notification
-node /absolute/path/dist/hook-cli.js stop
-node /absolute/path/dist/hook-cli.js stop-failure
-node /absolute/path/dist/hook-cli.js session-start
-node /absolute/path/dist/hook-cli.js session-end
-```
+| 旧設計(Hook CLI) | 新設計(SDK) |
+|---|---|
+| PermissionRequest Hook → Hook CLI → HTTP → Job Manager | `canUseTool` コールバック |
+| Stop Hook → Hook CLI → HTTP | `result` メッセージ / SDK Hooks の `Stop`(`last_assistant_message` 付き) |
+| Notification Hook → Hook CLI → HTTP | SDK Hooks の `Notification`(`notification_type` 付き) |
+| SessionStart / SessionEnd Hook | `system/init` メッセージ / ストリーム終了 |
 
-標準入力からHook JSONを受け取り、ローカルJob Managerへ渡す。
-
-通信候補：
-
-1. Unix Domain Socket
-2. localhost HTTP
-3. SQLite
-
-MVPではlocalhost HTTPでもよい。
-
-```text
-POST http://127.0.0.1:32145/internal/hooks/permission-request
-POST http://127.0.0.1:32145/internal/hooks/notification
-POST http://127.0.0.1:32145/internal/hooks/stop
-```
-
-外部インターフェースでは公開しない。
+ユーザーのグローバル `~/.claude/settings.json` の Hooks 設定は変更しない。
+SDK 側の hooks オプションはジョブセッション内に閉じる。
 
 ---
 
@@ -612,98 +613,88 @@ POST http://127.0.0.1:32145/internal/hooks/stop
 
 # 9. Claude Code起動方式
 
-## 9.1 基本方針
+## 9.1 基本方針(Agent SDK)
 
-Claude Codeを対象リポジトリまたは専用worktreeで起動し、最初のプロンプトとしてタスク本文を渡す。
+Claude Agent SDK の `query()` を専用worktreeを cwd として実行し、最初のプロンプトとしてタスク本文を渡す。
 
 概念例：
 
 ```ts
-spawn(
-  "claude",
-  [
-    "--print",
-    taskPrompt,
-  ],
-  {
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+const sessionId = jobSessionUuid; // ジョブ作成時に生成したUUID
+
+const q = query({
+  prompt: taskPrompt,
+  options: {
     cwd: worktreePath,
-    shell: false,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: {
+    // セッションIDを「取得」するのではなく「指定」する(実測確認済み)
+    // SDKオプション名は実装時にSDKの型定義で確認する
+    env: sanitizeClaudeEnv({
       ...process.env,
       CLAUDE_REMOTE_JOB_ID: jobId,
+    }),
+    canUseTool: async (toolName, input, { suggestions }) => {
+      // Slackへ許可要求を通知し、回答をPromiseで待つ
+      return await permissionBroker.request(jobId, toolName, input, suggestions);
     },
   },
-);
+});
+
+for await (const message of q) {
+  // system/init: session_id 確認
+  // assistant: 最新メッセージの保存
+  // result: 完了・エラー処理
+}
 ```
 
-実際のCLI引数は現在のClaude Code CLI仕様に合わせる。
+注意点(Phase 0 実測に基づく):
 
-対話継続、Remote Control、セッション再開などに必要なオプションは、以下で検出する。
-
-```bash
-claude --version
-claude --help
-claude remote-control --help
-```
-
-CLIの存在しないオプションを仮定しない。
+* `sanitizeClaudeEnv` で `CLAUDECODE` / `CLAUDE_CODE_*` 系環境変数を除去する。
+  `CLAUDE_CODE_CHILD_SESSION` が継承されるとトランスクリプト保存が無効化され、resume が壊れる。
+* `--print` + PermissionRequest Hook の組み合わせは成立しない(headlessではHookが発火せず即deny)。
+  許可制御は必ず `canUseTool` で行う。
+* SDKのオプション名・型は実装時に実際のSDKバージョンの型定義で確認し、存在しないオプションを仮定しない。
 
 ---
 
-## 9.2 Remote Control優先
+## 9.2 Remote Control(オプション機能)
 
-Remote Controlが利用できる場合は、次の目的で優先利用する。
+Phase 0 実測の結果、Remote Control連携はオプション機能とする。
 
-* スマートフォンから詳細なClaudeセッションを開く
-* Claudeとの継続会話
-* 実行状況確認
-* 公式UIでの権限操作
-* Remote Control URLまたはセッション識別子の取得
+確認済みの事実(v2.1.220):
 
-ただし、独自Web画面から指定リポジトリでセッションを起動できるか、起動後のURLを機械的に取得できるかは、現在のCLI仕様を確認する。
+* `claude remote-control` で起動でき、`https://claude.ai/code?environment=env_...` 形式のURLが端末に表示される
+* URLは**セッション単位ではなくenvironment(マシン接続)単位**
+* 起動時に対話確認(y/n)があり、完全な非対話起動はできない
+* 外部プログラムからセッションを操作する公式APIはない
 
-機械的取得ができない場合は、Remote Control連携をオプション機能とし、独自のHooksとプロセス管理を継続使用する。
+したがって:
+
+* Job Managerからの自動起動はしない(ユーザーが手動で `claude remote-control` を起動する運用)
+* 起動中であればWeb画面にenvironment URLを1つ表示する(ジョブ単位ではなくマシン単位)
+* Remote Controlの `--spawn=worktree` は本システムのGit Worktree Managerと競合するため併用しない
 
 ---
 
-## 9.3 フォールバック
+## 9.3 縮退運用(SDKが使えない場合)
 
-Remote Controlが利用できない場合は、Claude CodeをPTYまたはtmux内で起動する。
+SDKに問題が発生した場合の縮退運用として、CLI直接利用を残す。
 
 ```text
-Job Manager
-  ↓
-tmux new-session
-  ↓
-対象worktreeへcd
-  ↓
-claude起動
-  ↓
-SlackまたはWebからtmux send-keys
+起動:      claude -p "<taskPrompt>" --session-id <uuid> --output-format json
+追加指示:  claude -p --resume <uuid> "<message>" --output-format json
 ```
 
-文字入力は必ず`execFile`を使用する。
+制約:
 
-```ts
-await execFileAsync("tmux", [
-  "send-keys",
-  "-t",
-  tmuxTarget,
-  "-l",
-  "--",
-  message,
-]);
+* 動的な許可要求は処理できない(headlessでは即denyされ `permission_denials` に記録される)
+* 許可はsettings.jsonのallow/denyルールで事前定義できる範囲に限定する
+* denyされた場合はジョブを「判断待ち」にし、Slackへ通知して人間の指示を待つ
 
-await execFileAsync("tmux", [
-  "send-keys",
-  "-t",
-  tmuxTarget,
-  "Enter",
-]);
-```
+tmux / PTY による対話セッション制御は実装しない。
 
-ユーザー入力を`sh -c`へ渡さない。
+コマンド実行は必ず`execFile`を使用し、ユーザー入力を`sh -c`へ渡さない。
 
 ---
 
@@ -977,14 +968,12 @@ type Job = {
   worktreeBranch: string | null;
 
   claudeMode:
-    | "remote_control"
-    | "process"
-    | "tmux";
+    | "sdk"
+    | "process";
 
-  claudeSessionId: string | null;
-  remoteControlUrl: string | null;
-  tmuxSessionName: string | null;
+  claudeSessionId: string; // ジョブ作成時に生成し --session-id / SDK へ渡す
   processId: number | null;
+  processStartedAt: string | null; // PID再利用誤検知の防止(21.3)
 
   resultSummary: string | null;
   errorMessage: string | null;
@@ -1152,7 +1141,8 @@ Claudeからの最新メッセージ
 [Remote Controlを開く]
 ```
 
-Remote Control URLがない場合はボタンを表示しない。
+Remote Controlのenvironment URLはマシン単位で1つ(ジョブ単位ではない)。
+Remote Controlが起動していない場合はボタンを表示しない。
 
 ---
 
@@ -1231,7 +1221,7 @@ claude/job-20260727-001
 
 ---
 
-## 15.3 PermissionRequest
+## 15.3 許可要求(canUseTool)
 
 ```text
 🔐 実行許可が必要です
@@ -1333,57 +1323,36 @@ API rate limit
 
 ---
 
-# 16. Claude Code Hooks
+# 16. Claudeイベント処理(旧: Claude Code Hooks)
 
-使用候補：
+Phase 0 で入力JSON・戻り値・timeout挙動を実測済み(`docs/capability-report.md` §6〜§10)。
+SDK経由ではこれらをコールバックとして受け取るため、外部Hookプロセスは使わない。
 
-* `SessionStart`
-* `PermissionRequest`
-* `Notification`
-* `Stop`
-* `StopFailure`
-* `SessionEnd`
+使用するイベント:
 
-実装前に、ローカルにインストールされたClaude Codeのバージョンで利用可能なHook名、入力JSON、戻り値、timeout設定を確認する。
-
-確認用：
-
-```bash
-claude --version
-claude --help
-```
-
-加えてClaude Code公式ドキュメントを確認する。
+* `system/init`(セッション開始、session_id確認)
+* `canUseTool`(許可要求)
+* `Stop`(応答完了、`last_assistant_message` 付き)
+* `Notification`(`notification_type` 付き)
+* `result`(ターン完了・エラー)
 
 ---
 
-## 16.1 PermissionRequest
-
-許可確認は可能な限りHookの正式なdecisionレスポンスを利用する。
+## 16.1 許可要求(canUseTool)
 
 処理：
 
 ```text
-Claude Code
-  ↓
-PermissionRequest Hook
-  ↓
-Hook CLI
-  ↓
+Claude Code (SDK)
+  ↓ canUseTool(toolName, input, suggestions)
 Job Manager
-  ↓
-Slackへ通知
-  ↓
+  ↓ PendingAction作成 + Slackへ通知
 ユーザーが許可または拒否
   ↓
-Job Manager
+Job Manager が Promise を resolve
   ↓
-Hook CLI
-  ↓
-Claude Codeへdecisionを返す
+Claude Codeへ allow / deny を返す
 ```
-
-Hook CLIはSlack回答待ちの間だけ待機する。
 
 最大待機時間は設定可能にする。
 
@@ -1391,19 +1360,22 @@ Hook CLIはSlack回答待ちの間だけ待機する。
 PERMISSION_TIMEOUT_SECONDS=3600
 ```
 
-期限切れ時は自動許可しない。
+期限切れ時は自動許可せず、denyを返してジョブを「判断待ち」にする。
 
-拒否またはClaude CodeのローカルUIへの安全なフォールバックを行う。
+実測済みの参考情報:
+
+* Hook方式の場合のtimeoutデフォルトは600秒。timeout時は対話ダイアログへフォールバックし自動許可されない
+* 許可要求入力には `tool_name` / `tool_input` に加え `permission_suggestions`(Claude自身の許可提案)が含まれ、Slackの「詳細」表示に使える
 
 ---
 
-## 16.2 Stop
+## 16.2 Stop(応答完了)
 
-Claude Codeの応答完了時に、最終メッセージを取得できる場合はJob Managerへ送信する。
+実測により、Stopイベントの入力に `last_assistant_message`(最終メッセージ全文)が
+直接含まれることを確認済み。transcript解析は不要。
+(ドキュメント外フィールドのため、欠落時は `transcript_path` のJSONL末尾を読むフォールバックを実装する。)
 
-Stopだけでは「タスク完了」と「質問待ち」の区別が曖昧な可能性がある。
-
-MVPでは以下のように扱う。
+Stopだけでは「タスク完了」と「質問待ち」の区別が曖昧なため、MVPでは以下のように扱う。
 
 ```text
 Claude Codeが応答を終了しました。
@@ -1424,28 +1396,38 @@ Slack操作：
 
 ## 16.3 Notification
 
-利用可能な通知種別を確認し、以下に相当するイベントを処理する。
+実測済みの入力: `message`(人間可読文字列)と `notification_type`。
 
-* 入力待ち
-* 許可待ち
-* エージェント完了
-* アイドル状態
+公式ドキュメント記載の種別:
 
-PermissionRequestと同時に通知される場合は重複を除去する。
+* `permission_prompt`(許可待ち)
+* `idle_prompt`(入力待ち)
+* `auth_success`
+* `elicitation_*`(MCPのユーザー入力要求)
+
+処理方針:
+
+* `permission_prompt` は canUseTool と重複するため通知を抑制する
+* `idle_prompt` は「判断待ち」通知に使う
+* 完了は Notification ではなく Stop / result で扱う
+* `notification_type` はドキュメント未記載フィールドのため、欠落時は `message` 文字列で判定する
 
 ---
 
 # 17. Claudeへのメッセージ送信
 
-## 17.1 Remote Control
+## 17.1 実行中セッション(SDK)
 
-Remote Control APIまたはCLIで公式にメッセージ送信できる場合は、その方式を利用する。
+実行中のジョブへは SDK の `streamInput()` で追加メッセージを送る。
 
----
+## 17.2 アイドル状態のセッション(resume)
 
-## 17.2 PTY／tmux
+応答完了(Stop)後のジョブへは、`options.resume` + セッションID
+(縮退運用では `claude -p --resume <sessionId> "<message>"`)で送る。
+文脈が保持されることは実測確認済み。
 
-公式経路が利用できない場合は、起動済みセッションへPTYまたはtmux経由で送信する。
+同一セッションに対する resume の同時実行は排他制御する
+(実行中プロセスがある session に並行して resume しない)。
 
 入力例：
 
@@ -1460,6 +1442,8 @@ B案で進めてください。ただし既存APIのレスポンス形式は変�
 ```
 
 入力文字数は最大4000文字とする。
+
+Remote Control経由のメッセージ送信APIは存在しないため使用しない。
 
 ---
 
@@ -1678,10 +1662,12 @@ PIDだけでプロセスを信用せず、起動時刻やセッション識別�
 起動時に以下を確認する。
 
 * `running`状態のジョブ
-* PIDの存在
-* tmuxセッションの存在
+* PIDの存在(起動時刻も突合し、PID再利用を誤検知しない)
+* `claude agents --json` の実行中セッション一覧との突合(実測でpid / sessionId / cwd / statusを取得可能)
 * worktreeの存在
-* Claudeセッションの存在
+* トランスクリプト(`~/.claude/projects/<cwd-encoded>/<sessionId>.jsonl`)の存在
+
+プロセスは失われたがトランスクリプトが残っているジョブは、resumeで再開可能として「判断待ち」に戻す。
 
 復旧できないものは`orphaned`とする。
 
@@ -1737,10 +1723,11 @@ claude-remote-job-manager/
 │   ├── claude/
 │   │   ├── adapter.ts
 │   │   ├── capabilities.ts
-│   │   ├── remote-control-adapter.ts
+│   │   ├── sdk-adapter.ts
 │   │   ├── process-adapter.ts
-│   │   ├── tmux-adapter.ts
-│   │   └── hook-schemas.ts
+│   │   ├── mock-adapter.ts
+│   │   ├── permission-broker.ts
+│   │   └── event-schemas.ts
 │   │
 │   ├── git/
 │   │   ├── repository.ts
@@ -1772,11 +1759,7 @@ claude-remote-job-manager/
 │       └── projects.ts
 │
 ├── services/
-│   ├── job-worker/
-│   │   ├── src/
-│   │   └── package.json
-│   │
-│   └── hook-cli/
+│   └── job-worker/
 │       ├── src/
 │       └── package.json
 │
@@ -1794,7 +1777,6 @@ claude-remote-job-manager/
 │
 ├── scripts/
 │   ├── setup.ts
-│   ├── install-hooks.ts
 │   ├── install-launch-agent.ts
 │   ├── doctor.ts
 │   └── uninstall.ts
@@ -1821,9 +1803,6 @@ NODE_ENV=development
 WEB_HOST=127.0.0.1
 WEB_PORT=32146
 
-INTERNAL_HOOK_HOST=127.0.0.1
-INTERNAL_HOOK_PORT=32145
-
 DATABASE_PATH=./data/claude-remote.sqlite
 
 SLACK_BOT_TOKEN=xoxb-...
@@ -1838,7 +1817,6 @@ WORKTREE_ROOT=/Users/koki/.claude-remote/worktrees
 
 CLAUDE_COMMAND=claude
 GIT_COMMAND=git
-TMUX_COMMAND=tmux
 
 MAX_CONCURRENT_JOBS=2
 MAX_CONCURRENT_JOBS_PER_PROJECT=1
@@ -1878,15 +1856,14 @@ pnpm doctor
 * Node.js
 * pnpm
 * git
-* Claude Code
-* Claude Codeバージョン
-* Claude Code Remote Control
-* tmux
+* Claude Code(バージョン 2.1.x 以上)
+* Claude Agent SDK(canUseToolの動作確認)
+* Remote Control(任意。起動中ならenvironment URLを表示)
 * SQLite書き込み
 * Repository Registry
 * worktree root
 * Slack接続
-* Hooks設定
+* `CLAUDE*` 系環境変数の混入警告(transcript保存が壊れるため)
 * Tailscale状態
 * Macスリープ設定の警告
 
@@ -1947,20 +1924,10 @@ GET /api/jobs/:jobId/files/*
 
 ---
 
-## 25.4 内部Hook
+## 25.4 内部Hook API(廃止)
 
-```text
-POST /internal/hooks/session-start
-POST /internal/hooks/permission-request
-POST /internal/hooks/notification
-POST /internal/hooks/stop
-POST /internal/hooks/stop-failure
-POST /internal/hooks/session-end
-```
-
-localhost以外からの接続を拒否する。
-
-可能ならUnix Domain Socketへ移行する。
+旧設計の `/internal/hooks/*` エンドポイントは廃止する。
+Claudeイベントは SDK コールバックとして Job Manager プロセス内で完結する(8.6参照)。
 
 ---
 
@@ -1973,15 +1940,15 @@ localhost以外からの接続を拒否する。
 3. プロジェクト一覧
 4. 新規タスク画面
 5. Git worktree作成
-6. Claude Code起動
+6. Claude Code起動(Agent SDK)
 7. ジョブ一覧
 8. ジョブ詳細
 9. Slack Socket Mode
 10. 開始通知
-11. PermissionRequest通知
+11. 許可要求通知(canUseTool)
 12. 許可／拒否ボタン
-13. Stop通知
-14. 追加指示Modal
+13. 応答完了通知(Stop / result)
+14. 追加指示Modal(streamInput / resume)
 15. 完了通知
 16. エラー通知
 17. ジョブ停止
@@ -2015,25 +1982,23 @@ localhost以外からの接続を拒否する。
 
 # 27. 実装フェーズ
 
-## Phase 0：成立性調査
+## Phase 0：成立性調査【完了 2026-07-28】
 
-実装前に必ず確認する。
+調査結果は`docs/capability-report.md`に記録済み。
+
+主要な結論:
 
 ```text
-1. Claude Codeのバージョン
-2. claude --help
-3. claude remote-control --help
-4. 利用可能なHooks
-5. Hook入力JSON
-6. PermissionRequest戻り値
-7. Hook timeout
-8. Stop時に取得できるデータ
-9. セッションID
-10. Remote Control URLの取得方法
-11. 非対話起動と対話継続の方法
+1. Claude Code v2.1.220 で調査
+2. headless(--print)では PermissionRequest Hook が発火しない(即deny)
+   → 許可制御は Agent SDK の canUseTool を採用
+3. Stop イベントに last_assistant_message が直接含まれる
+4. --session-id でセッションIDを事前指定できる(取得ではなく指定)
+5. Remote Control は利用可能だが URL は environment 単位・非対話起動不可
+   → オプション機能に格下げ
+6. tmux 不要(未インストールでもあった)
+7. CLAUDE* 系環境変数の子プロセスへの継承に注意(transcript保存が壊れる)
 ```
-
-調査結果を`docs/capability-report.md`へ記録する。
 
 ---
 
@@ -2074,12 +2039,12 @@ localhost以外からの接続を拒否する。
 
 ## Phase 4：Claude Code起動
 
-* Capability Detection
-* Claude Adapter
-* ジョブ起動
-* 標準出力取得
+* Capability Detection(claudeバージョン・SDK動作確認)
+* SdkClaudeAdapter / MockClaudeAdapter
+* ジョブ起動(query + セッションID指定 + env サニタイズ)
+* メッセージストリーム取得(system/init, assistant, result)
 * 終了検知
-* 停止
+* 停止(interrupt)
 * 状態保存
 
 ---
@@ -2095,15 +2060,14 @@ localhost以外からの接続を拒否する。
 
 ---
 
-## Phase 6：Hooks
+## Phase 6：許可・イベントフロー
 
-* PermissionRequest
-* Notification
-* Stop
-* StopFailure
-* Slack回答反映
-* 重複通知防止
-* timeout
+* canUseTool → PendingAction → Slack通知 → 回答反映
+* Stop(last_assistant_message)通知
+* Notification(idle_prompt)通知
+* 重複通知防止(permission_promptの抑制)
+* PERMISSION_TIMEOUT_SECONDS(期限切れはdeny + 判断待ち)
+* 追加指示(streamInput / resume + 排他制御)
 
 ---
 
@@ -2251,8 +2215,8 @@ Playwrightでモバイル幅を使用する。
 2. アーキテクチャ
 3. 必要環境
 4. Claude Codeインストール
-5. Remote Control確認
-6. Claude Code Hooks設定
+5. Remote Control設定(任意機能)
+6. 許可フロー(canUseTool)の仕組み
 7. Slack App作成
 8. Socket Mode設定
 9. Slack Manifest適用
@@ -2275,13 +2239,12 @@ Playwrightでモバイル幅を使用する。
 
 # 31. 実装上の重要方針
 
-* まずPhase 0で現在のClaude Code仕様を検証する
-* Remote Controlを無条件に前提としない
-* Remote Controlが利用できる場合は積極的に活用する
-* 利用できない処理はHooks、PTY、tmuxで補完する
-* Claude Code CLIオプションを想像で実装しない
-* 既存のClaude Code設定を破壊しない
-* Hooks設定を書き換える前にバックアップする
+* Phase 0の実測結果(docs/capability-report.md)を仕様の正とする
+* Claude連携の主経路はAgent SDK(canUseTool / streamInput / resume)とする
+* Remote Controlはオプション機能(environment URL提示のみ)とする
+* Claude Code CLI/SDKのオプションを想像で実装しない(実装時に型定義・ヘルプで確認)
+* 既存のClaude Code設定(~/.claude/settings.json等)を書き換えない
+* Claude Code起動時に CLAUDE* 系環境変数をサニタイズする
 * Slack回答の失敗時に自動許可しない
 * 自動マージ・自動push・自動デプロイをしない
 * 任意シェル実行APIを作らない
@@ -2298,43 +2261,11 @@ Playwrightでモバイル幅を使用する。
 
 この設計書に基づいて実装してください。
 
-最初にコードを書き始めるのではなく、Phase 0の成立性調査を行ってください。
+Phase 0の成立性調査は完了済みです(`docs/capability-report.md`)。
+本設計書はその結果を反映済みのため、Phase 1から順に実装してください。
 
-以下を実際のローカル環境と公式ドキュメントで確認してください。
-
-```text
-- Claude Codeの現在のバージョン
-- Remote Controlの利用可否
-- Remote Controlセッションの起動方法
-- セッションURLまたは識別子の取得方法
-- 外部から既存セッションへメッセージを送る方法
-- PermissionRequest Hookの入力と戻り値
-- PermissionRequest Hookの最大待機時間
-- Stop Hookで取得可能な最終メッセージ
-- Notificationイベントの種類
-- ClaudeセッションIDとジョブIDの紐づけ方法
-- CLIプロセスを非対話で開始し、後から対話を継続する方法
-```
-
-調査結果を以下へ記録してください。
-
-```text
-docs/capability-report.md
-```
-
-各項目について、次の形式で記載してください。
-
-```text
-機能:
-利用可否:
-確認したコマンド:
-確認した公式資料:
-採用する実装方法:
-フォールバック:
-注意点:
-```
-
-調査後、実装計画を更新し、Phase 1から順に実装してください。
+実装中にこの設計書と実際のCLI/SDKの挙動が食い違った場合は、
+実測を正としてcapability-reportと設計書の両方を更新してください。
 
 Slack Token、App Token、チャンネルID、ユーザーIDなど、利用者しか用意できない値は`.env.example`へ定義してください。
 
@@ -2348,11 +2279,10 @@ MVP完了時には、以下を必ず提示してください。
 - Slack Appの設定手順
 - Tailscale経由でWeb画面を開く手順
 - Repository Registryの設定方法
-- Claude Code Hooksの設定方法
 - Job Managerの起動方法
 - LaunchAgentの設定方法
 - スマートフォンからタスクを開始する手順
-- PermissionRequestの確認方法
+- 許可要求(canUseTool)の確認方法
 - Git差分の確認方法
 - 停止方法
 - アンインストール方法
