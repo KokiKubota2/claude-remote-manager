@@ -89,9 +89,10 @@ function makeManager(
     registry,
     worktrees: new WorktreeManager(createGitRunner(), worktreeRoot),
     adapter,
-    permissionHandler:
-      permissionHandler ??
-      (async () => ({ behavior: "deny", message: "許可フロー未接続のため拒否" })),
+    permissionHandler: async (_jobId, req, _signal) =>
+      permissionHandler
+        ? permissionHandler(req)
+        : { behavior: "deny", message: "許可フロー未接続のため拒否" },
     maxConcurrentJobs: limits.max ?? 2,
     maxConcurrentJobsPerProject: limits.perProject ?? 1,
     onJobEvent: (e) => events.push(e),

@@ -21,7 +21,16 @@ export const ACTIVE_JOB_STATUSES: JobStatus[] = [
   "cancel_requested",
 ];
 
-export class JobStateError extends Error {}
+export class JobStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JobStateError";
+  }
+}
+
+export function isJobStateError(e: unknown): boolean {
+  return e instanceof JobStateError || (e as Error | null)?.name === "JobStateError";
+}
 
 function nowIso(): string {
   return new Date().toISOString();

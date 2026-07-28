@@ -3,7 +3,16 @@ import path from "node:path";
 import { GitError, type GitRunner } from "./exec";
 import { worktreeBranchOf, worktreePathOf } from "./naming";
 
-export class WorktreeError extends Error {}
+export class WorktreeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorktreeError";
+  }
+}
+
+export function isWorktreeError(e: unknown): boolean {
+  return e instanceof WorktreeError || (e as Error | null)?.name === "WorktreeError";
+}
 
 export type WorktreeInfo = {
   worktreePath: string;

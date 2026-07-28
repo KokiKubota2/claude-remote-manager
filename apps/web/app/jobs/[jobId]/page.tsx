@@ -1,5 +1,12 @@
 import { notFound } from "next/navigation";
-import { getJob, listJobEvents } from "@claude-remote/core";
+import {
+  detectDangerousCommand,
+  getJob,
+  listJobEvents,
+  listPendingActions,
+  redactSecrets,
+} from "@claude-remote/core";
+import { PermissionPrompt, type PendingPermission } from "@/components/PermissionPrompt";
 import { JobStatusBadge } from "@/components/JobStatusBadge";
 import { NavBar } from "@/components/NavBar";
 import { JobActions } from "@/components/JobActions";
@@ -17,6 +24,29 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
   if (!job) notFound();
 
   const events = listJobEvents(db, jobId, 30);
+  const pendingPermissions: PendingPermission[] = listPendingActions(db, jobId)
+    .filter((a) => a.type === "permission")
+    .map((a) => {
+      let toolName = "?";
+      let commandText = "";
+      try {
+        const req = JSON.parse(a.requestJson) as {
+          toolName?: string;
+          input?: Record<string, unknown>;
+        };
+        toolName = req.toolName ?? "?";
+        commandText =
+          typeof req.input?.command === "string" ? req.input.command : JSON.stringify(req.input);
+      } catch {
+        commandText = "(解析できませんでした)";
+      }
+      return {
+        id: a.id,
+        toolName,
+        commandText: redactSecrets(commandText).slice(0, 1000),
+        warnings: detectDangerousCommand(commandText),
+      };
+    });
   const latestMessage = events.find((e) => e.type === "log" || e.type === "completed");
   let latestText: string | null = null;
   if (job.resultSummary) {
@@ -34,6 +64,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
     <div className="pb-8">
       <NavBar title={job.title} backHref="/" />
       <main className="flex flex-col gap-5 p-4">
+        <PermissionPrompt pending={pendingPermissions} />
+
         <section className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex items-center justify-between">
             <span className="text-sm text-neutral-500">{job.projectId}</span>
