@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JOB_STATUSES, JOB_STATUS_TRANSITIONS, canTransition } from "../src/types/index.js";
+import { JOB_STATUSES, JOB_STATUS_TRANSITIONS, canTransition } from "../src/types/index";
 
 describe("状態遷移(§12)", () => {
   it("基本フローを許可する", () => {

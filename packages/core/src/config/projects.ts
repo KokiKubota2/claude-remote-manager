@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
-import type { Project } from "../types/index.js";
+import type { Project } from "../types/index";
 
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 

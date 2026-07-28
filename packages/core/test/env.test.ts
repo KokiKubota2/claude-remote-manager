@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseEnv, slackConfigOf } from "../src/config/env.js";
+import { parseEnv, slackConfigOf } from "../src/config/env";
 
 const TOKEN = "a".repeat(32);
 

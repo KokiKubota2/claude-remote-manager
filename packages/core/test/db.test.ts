@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { openDb } from "../src/db/client.js";
-import { jobs } from "../src/db/schema.js";
+import { openDb } from "../src/db/client";
+import { jobs } from "../src/db/schema";
 
 let tmpDir: string;
 
