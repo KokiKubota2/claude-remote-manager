@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { JobStateError, appendJobEvent, getJob, transitionJob } from "@claude-remote/core";
+import { appendJobEvent, getJob, isJobStateError, transitionJob } from "@claude-remote/core";
 import { requireAuthApi } from "@/lib/server/auth";
 import { jobManager } from "@/lib/server/job-manager";
 import { services } from "@/lib/server/services";
@@ -37,8 +37,8 @@ export async function POST(
     }
     return NextResponse.json({ job: updated });
   } catch (e) {
-    if (e instanceof JobStateError) {
-      return NextResponse.json({ error: e.message }, { status: 409 });
+    if (isJobStateError(e)) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 409 });
     }
     throw e;
   }

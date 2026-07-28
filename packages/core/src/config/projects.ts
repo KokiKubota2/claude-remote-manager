@@ -23,7 +23,16 @@ const registryFileSchema = z.object({
   projects: z.array(projectSchema),
 });
 
-export class RegistryError extends Error {}
+export class RegistryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RegistryError";
+  }
+}
+
+export function isRegistryError(e: unknown): boolean {
+  return e instanceof RegistryError || (e as Error | null)?.name === "RegistryError";
+}
 
 /**
  * Repository Registryを読み込み、スキーマ検証して返す。

@@ -2,29 +2,33 @@ import "server-only";
 import {
   JobManager,
   MockClaudeAdapter,
+  PermissionBroker,
   SdkClaudeAdapter,
   getLogger,
   type ClaudeAdapter,
-  type PermissionHandler,
 } from "@claude-remote/core";
 import { services } from "./services";
 import { buildSlackHandlers, slackBridge, startSlackBridge } from "./slack";
 
 const log = getLogger("web-job-manager");
 
-const globalStore = globalThis as unknown as { __crmJobManager?: JobManager };
+const globalStore = globalThis as unknown as {
+  __crmJobManager?: JobManager;
+  __crmBroker?: PermissionBroker;
+};
 
-/**
- * 許可要求のデフォルトハンドラ。
- * Phase 6でSlack連携のPermissionBrokerに置き換わる。
- * それまでは自動許可せず、必ず拒否する(§16.1 自動許可しない)。
- */
-const denyByDefault: PermissionHandler = async (request) => ({
-  behavior: "deny",
-  message:
-    `リモート許可フローが未接続のため「${request.toolName}」の実行を拒否しました。` +
-    "許可が不要な方法で続行するか、要約して終了してください。",
-});
+/** 許可要求の仲介(Slack/Web両方から回答できる)。jobManager()が初期化する */
+export function permissionBroker(): PermissionBroker {
+  if (!globalStore.__crmBroker) {
+    const { db, env } = services();
+    globalStore.__crmBroker = new PermissionBroker(
+      db,
+      slackBridge(),
+      env.PERMISSION_TIMEOUT_SECONDS,
+    );
+  }
+  return globalStore.__crmBroker;
+}
 
 export function jobManager(): JobManager {
   if (!globalStore.__crmJobManager) {
@@ -34,12 +38,13 @@ export function jobManager(): JobManager {
         ? new MockClaudeAdapter()
         : new SdkClaudeAdapter(env.CLAUDE_JOB_MODEL ? { model: env.CLAUDE_JOB_MODEL } : {});
     const slack = slackBridge();
+    const broker = permissionBroker();
     const manager = new JobManager({
       db,
       registry,
       worktrees,
       adapter,
-      permissionHandler: denyByDefault,
+      permissionHandler: broker.handler,
       maxConcurrentJobs: env.MAX_CONCURRENT_JOBS,
       maxConcurrentJobsPerProject: env.MAX_CONCURRENT_JOBS_PER_PROJECT,
       // ジョブのライフサイクルをSlackへ通知する(§15)
@@ -71,6 +76,8 @@ export function jobManager(): JobManager {
       buildSlackHandlers({
         sendMessage: (jobId, message) => manager.sendMessage(jobId, message),
         interrupt: (jobId) => manager.interruptIfActive(jobId),
+        onPermissionAnswer: (id, answer, userId) => broker.answer(id, answer, userId),
+        onPermissionDetails: (id) => broker.details(id),
       }),
     );
     log.info({ adapter: adapter.kind, slack: slack.kind }, "job manager initialized");

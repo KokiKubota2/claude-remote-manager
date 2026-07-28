@@ -19,8 +19,15 @@ export type PermissionDecision =
   | { behavior: "allow"; updatedInput?: Record<string, unknown> }
   | { behavior: "deny"; message: string; interrupt?: boolean };
 
-/** 許可要求に回答する関数。Phase 6でSlack連携のPermissionBrokerが実装する */
+/** 許可要求に回答する関数(アダプタ内部用) */
 export type PermissionHandler = (
+  request: PermissionRequest,
+  signal: AbortSignal,
+) => Promise<PermissionDecision>;
+
+/** ジョブ文脈つきの許可ハンドラ(JobManager用)。PermissionBrokerが実装する */
+export type JobPermissionHandler = (
+  jobId: string,
   request: PermissionRequest,
   signal: AbortSignal,
 ) => Promise<PermissionDecision>;
@@ -65,4 +72,13 @@ export interface ClaudeAdapter {
   startTurn(options: StartTurnOptions): ClaudeTurnHandle;
 }
 
-export class ClaudeAdapterError extends Error {}
+export class ClaudeAdapterError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClaudeAdapterError";
+  }
+}
+
+export function isClaudeAdapterError(e: unknown): boolean {
+  return e instanceof ClaudeAdapterError || (e as Error | null)?.name === "ClaudeAdapterError";
+}

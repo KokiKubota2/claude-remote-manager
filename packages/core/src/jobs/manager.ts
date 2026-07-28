@@ -2,7 +2,7 @@ import { inArray, sql } from "drizzle-orm";
 import type {
   ClaudeAdapter,
   ClaudeTurnHandle,
-  PermissionHandler,
+  JobPermissionHandler,
 } from "../claude/adapter";
 import { sanitizeClaudeEnv } from "../claude/env";
 import { buildTaskPrompt } from "../claude/prompt";
@@ -31,7 +31,7 @@ export type JobManagerDeps = {
   registry: ProjectRegistry;
   worktrees: WorktreeManager;
   adapter: ClaudeAdapter;
-  permissionHandler: PermissionHandler;
+  permissionHandler: JobPermissionHandler;
   maxConcurrentJobs: number;
   maxConcurrentJobsPerProject: number;
   /** ジョブの状態変化を通知する(Phase 5でSlack Bridgeが購読) */
@@ -185,7 +185,7 @@ export class JobManager {
         this.safeTransition(jobId, "waiting_permission");
         appendJobEvent(db, jobId, "permission_requested", { request });
         try {
-          const decision = await this.deps.permissionHandler(request, signal);
+          const decision = await this.deps.permissionHandler(jobId, request, signal);
           appendJobEvent(db, jobId, "permission_answered", { request, decision });
           return decision;
         } finally {
