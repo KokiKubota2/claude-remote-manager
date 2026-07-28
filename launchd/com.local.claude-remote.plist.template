@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.claude-remote</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-dims</string>
+    <string>{{NODE_BIN_DIR}}/node</string>
+    <string>{{PNPM_PATH}}</string>
+    <string>start</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>{{REPO_DIR}}</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{NODE_BIN_DIR}}:/usr/local/bin:/usr/bin:/bin</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>{{REPO_DIR}}/logs/claude-remote.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{REPO_DIR}}/logs/claude-remote.error.log</string>
+</dict>
+</plist>

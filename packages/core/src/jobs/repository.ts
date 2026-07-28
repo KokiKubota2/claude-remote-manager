@@ -161,6 +161,21 @@ export function appendJobEvent(
     .run();
 }
 
+/** ジョブごとのイベントを最新maxKeep件に間引く(§14.6 ログ肥大防止) */
+export function pruneJobEvents(db: Db, jobId: string, maxKeep = 500): number {
+  const result = db.run(sql`
+    DELETE FROM job_events
+    WHERE job_id = ${jobId}
+      AND id NOT IN (
+        SELECT id FROM job_events
+        WHERE job_id = ${jobId}
+        ORDER BY created_at DESC
+        LIMIT ${maxKeep}
+      )
+  `);
+  return Number(result.changes ?? 0);
+}
+
 export function listJobEvents(db: Db, jobId: string, limit = 200) {
   return db
     .select()

@@ -6,13 +6,21 @@ import type {
 } from "../claude/adapter";
 import { sanitizeClaudeEnv } from "../claude/env";
 import { buildTaskPrompt } from "../claude/prompt";
+import { transcriptExists } from "../claude/transcript";
 import type { ProjectRegistry } from "../config/projects";
 import type { Db } from "../db/client";
 import { jobs, type JobRow } from "../db/schema";
 import type { WorktreeManager } from "../git/worktree";
 import { getLogger } from "../logging/logger";
 import type { CreateJobInput, JobStatus } from "../types/index";
-import { appendJobEvent, getJob, listJobs, transitionJob } from "./repository";
+import { answerPendingAction, listPendingActions } from "./pending-actions";
+import {
+  appendJobEvent,
+  getJob,
+  listJobs,
+  pruneJobEvents,
+  transitionJob,
+} from "./repository";
 
 const log = getLogger("job-manager");
 
@@ -54,8 +62,65 @@ export class JobManager {
 
   start(intervalMs = 3000): void {
     if (this.timer) return;
+    this.recoverOnStartup();
     this.timer = setInterval(() => void this.tick(), intervalMs);
     log.info("job manager started");
+  }
+
+  /**
+   * 再起動後の復旧(§21.4)。
+   * 実行中扱いのままのジョブは対応プロセスが失われている。
+   * トランスクリプトが残っていればresume可能として「判断待ち」へ、なければorphanedにする。
+   */
+  recoverOnStartup(): void {
+    const { db, registry } = this.deps;
+    const stale = listJobs(db, { statuses: RUNNING_STATUSES });
+    for (const job of stale) {
+      if (this.activeTurns.has(job.id)) continue;
+
+      // 未回答の許可要求は失効させる(自動許可しない)
+      for (const action of listPendingActions(db, job.id)) {
+        try {
+          answerPendingAction(db, action.id, "cancelled", { reason: "job manager restart" });
+        } catch {
+          // すでに処理済み
+        }
+      }
+
+      const project = registry.get(job.projectId);
+      const cwd = job.worktreePath ?? project?.repositoryPath ?? null;
+      const resumable = cwd !== null && transcriptExists(cwd, job.claudeSessionId);
+
+      try {
+        if (job.status === "cancel_requested") {
+          transitionJob(db, job.id, "cancelled", { completedAt: new Date().toISOString() });
+          appendJobEvent(db, job.id, "cancelled", { via: "recovery" });
+        } else if (["preparing", "starting"].includes(job.status)) {
+          transitionJob(db, job.id, "failed", {
+            errorMessage: "Job Manager再起動により起動前に中断されました。再作成してください",
+            completedAt: new Date().toISOString(),
+          });
+          appendJobEvent(db, job.id, "failed", { via: "recovery" });
+        } else if (resumable) {
+          // running / waiting_permission / waiting_input -> waiting_input(追加指示で再開可能)
+          if (job.status !== "waiting_input") {
+            transitionJob(db, job.id, "waiting_input");
+          }
+          appendJobEvent(db, job.id, "log", {
+            message:
+              "Job Manager再起動により実行が中断されました。セッションは保存されているため、追加指示で再開できます",
+          });
+        } else {
+          transitionJob(db, job.id, "orphaned", {
+            errorMessage: "再起動後にプロセスもセッション記録も見つかりませんでした",
+          });
+          appendJobEvent(db, job.id, "failed", { via: "recovery", orphaned: true });
+        }
+        log.warn({ jobId: job.id, from: job.status, resumable }, "recovered stale job");
+      } catch (e) {
+        log.error({ jobId: job.id, err: (e as Error).message }, "recovery failed");
+      }
+    }
   }
 
   stop(): void {
@@ -233,6 +298,7 @@ export class JobManager {
         numTurns: result.numTurns,
         totalCostUsd: result.totalCostUsd,
       });
+      pruneJobEvents(db, jobId);
       this.deps.onJobEvent?.({ type: "job_completed", job: completed, resultText: result.resultText });
     } catch (e) {
       this.failJob(jobId, (e as Error).message);

@@ -102,6 +102,12 @@ export default async function DashboardPage() {
             すべてのジョブ
           </Link>
         </nav>
+
+        <p className="text-xs text-neutral-400">
+          Mac状態: オンライン ・ 最終確認{" "}
+          {new Date().toLocaleTimeString("ja-JP", { hour12: false })}
+          (このページが表示できていればJob Managerは稼働中です)
+        </p>
       </main>
 
       <div className="fixed inset-x-0 bottom-0 mx-auto max-w-lg border-t border-neutral-200 bg-neutral-100/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
