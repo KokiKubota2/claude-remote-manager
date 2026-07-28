@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import { parseEnv, slackConfigOf } from "../packages/core/src/config/env.js";
-import { ProjectRegistry, resolveProjectPath } from "../packages/core/src/config/projects.js";
-import { openDb } from "../packages/core/src/db/client.js";
+import { parseEnv, slackConfigOf } from "../packages/core/src/config/env";
+import { ProjectRegistry, resolveProjectPath } from "../packages/core/src/config/projects";
+import { openDb } from "../packages/core/src/db/client";
 
 type CheckResult = { name: string; ok: boolean; detail: string; warn?: boolean };
 

@@ -9,7 +9,7 @@ import {
   isValidProjectId,
   loadRegistry,
   resolveProjectPath,
-} from "../src/config/projects.js";
+} from "../src/config/projects";
 
 let tmpDir: string;
 
