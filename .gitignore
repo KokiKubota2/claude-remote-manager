@@ -9,3 +9,6 @@ data/*.sqlite-*
 config/projects.yaml
 logs/
 .DS_Store
+logs/*
+!logs/.gitkeep
+!data/.gitkeep

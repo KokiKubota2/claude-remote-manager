@@ -13,7 +13,10 @@
     "doctor": "tsx scripts/doctor.ts",
     "test": "pnpm -r test",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "setup": "tsx scripts/setup.ts",
+    "launchagent:install": "tsx scripts/install-launch-agent.ts",
+    "launchagent:uninstall": "tsx scripts/uninstall-launch-agent.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
