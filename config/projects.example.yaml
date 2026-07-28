@@ -1,0 +1,17 @@
+# Repository Registry
+# このファイルを config/projects.yaml へコピーして編集する。
+# ここに登録されたリポジトリだけがジョブの対象になる。
+projects:
+  - id: example-api
+    name: Example API
+    path: /Users/you/develop/example-api
+    defaultBranch: develop
+    packageManager: pnpm
+    enabled: true
+
+  - id: example-web
+    name: Example Web
+    path: /Users/you/develop/example-web
+    defaultBranch: main
+    packageManager: npm
+    enabled: false
