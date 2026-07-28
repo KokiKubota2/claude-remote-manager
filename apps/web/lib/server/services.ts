@@ -1,7 +1,13 @@
 import "server-only";
-import { getEnv, type Env } from "@claude-remote/core/config";
-import { ProjectRegistry } from "@claude-remote/core/config";
-import { openDb, type Db } from "@claude-remote/core/db";
+import {
+  ProjectRegistry,
+  WorktreeManager,
+  createGitRunner,
+  getEnv,
+  openDb,
+  type Db,
+  type Env,
+} from "@claude-remote/core";
 
 /**
  * Next.jsサーバープロセス内のシングルトン。
@@ -11,6 +17,7 @@ type Services = {
   env: Env;
   db: Db;
   registry: ProjectRegistry;
+  worktrees: WorktreeManager;
 };
 
 const globalStore = globalThis as unknown as { __crmServices?: Services };
@@ -20,7 +27,8 @@ export function services(): Services {
     const env = getEnv();
     const { db } = openDb(env.DATABASE_PATH);
     const registry = ProjectRegistry.load(env.PROJECT_CONFIG_PATH);
-    globalStore.__crmServices = { env, db, registry };
+    const worktrees = new WorktreeManager(createGitRunner(env.GIT_COMMAND), env.WORKTREE_ROOT);
+    globalStore.__crmServices = { env, db, registry, worktrees };
   }
   return globalStore.__crmServices;
 }

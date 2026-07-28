@@ -79,6 +79,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
           </section>
         )}
 
+        {job.worktreePath && (
+          <a
+            href={`/jobs/${job.id}/diff`}
+            className="rounded-xl border border-neutral-300 p-3.5 text-center text-sm font-semibold dark:border-neutral-700"
+          >
+            Git差分を見る
+          </a>
+        )}
+
         <JobActions jobId={job.id} status={job.status} />
 
         <section>
