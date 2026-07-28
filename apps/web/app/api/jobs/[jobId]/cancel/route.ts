@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { JobStateError, appendJobEvent, getJob, transitionJob } from "@claude-remote/core";
 import { requireAuthApi } from "@/lib/server/auth";
+import { jobManager } from "@/lib/server/job-manager";
 import { services } from "@/lib/server/services";
 
 /**
  * ジョブ停止(§29 シナリオE)。
  * - queued/preparing/starting: 即cancelled
- * - running系: cancel_requestedにし、実行側(Job Manager)が停止処理を行う
- *   (Phase 4でプロセスinterruptに接続する)
+ * - running系: cancel_requestedにし、実行中ターンをinterruptする
  */
 export async function POST(
   request: NextRequest,
@@ -31,6 +31,7 @@ export async function POST(
     } else if (["running", "waiting_permission", "waiting_input"].includes(job.status)) {
       updated = transitionJob(db, jobId, "cancel_requested");
       appendJobEvent(db, jobId, "cancelled", { via: "web", from: job.status, requested: true });
+      void jobManager().interruptIfActive(jobId);
     } else {
       return NextResponse.json({ error: `停止できない状態です: ${job.status}` }, { status: 409 });
     }

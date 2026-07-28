@@ -35,6 +35,10 @@ const envSchema = z.object({
 
   CLAUDE_COMMAND: z.string().default("claude"),
   GIT_COMMAND: z.string().default("git"),
+  /** mock: Claude/Slackなしでの開発・E2E用 */
+  CLAUDE_ADAPTER: z.enum(["sdk", "mock"]).default("sdk"),
+  /** ジョブ実行に使うモデル(未指定はClaude Codeのデフォルト) */
+  CLAUDE_JOB_MODEL: z.string().optional().or(z.literal("").transform(() => undefined)),
 
   MAX_CONCURRENT_JOBS: z.coerce.number().int().min(1).max(10).default(2),
   MAX_CONCURRENT_JOBS_PER_PROJECT: z.coerce.number().int().min(1).max(10).default(1),

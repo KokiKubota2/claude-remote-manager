@@ -13,7 +13,7 @@ describe("状態遷移(§12)", () => {
   });
 
   it("不正な遷移を拒否する", () => {
-    expect(canTransition("completed", "running")).toBe(false);
+    expect(canTransition("completed", "running")).toBe(true); // 追加指示のresume
     expect(canTransition("cancelled", "running")).toBe(false);
     expect(canTransition("queued", "running")).toBe(false);
     expect(canTransition("failed", "queued")).toBe(false);
@@ -25,9 +25,11 @@ describe("状態遷移(§12)", () => {
     }
   });
 
-  it("終端状態からは遷移できない", () => {
-    for (const terminal of ["completed", "failed", "cancelled", "expired"] as const) {
+  it("cancelled/expiredは終端、completed/failedはresume(running)のみ許可", () => {
+    for (const terminal of ["cancelled", "expired"] as const) {
       expect(JOB_STATUS_TRANSITIONS[terminal]).toHaveLength(0);
     }
+    expect(JOB_STATUS_TRANSITIONS.completed).toEqual(["running"]);
+    expect(JOB_STATUS_TRANSITIONS.failed).toEqual(["running"]);
   });
 });

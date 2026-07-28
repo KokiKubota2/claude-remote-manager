@@ -3,6 +3,7 @@ import { getJob, listJobEvents } from "@claude-remote/core";
 import { JobStatusBadge } from "@/components/JobStatusBadge";
 import { NavBar } from "@/components/NavBar";
 import { JobActions } from "@/components/JobActions";
+import { SendMessageForm } from "@/components/SendMessageForm";
 import { requireAuthPage } from "@/lib/server/auth";
 import { services } from "@/lib/server/services";
 
@@ -87,6 +88,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
             Git差分を見る
           </a>
         )}
+
+        <SendMessageForm jobId={job.id} status={job.status} />
 
         <JobActions jobId={job.id} status={job.status} />
 

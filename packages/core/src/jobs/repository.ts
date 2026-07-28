@@ -55,6 +55,8 @@ export function createJob(db: Db, project: Project, input: CreateJobInput): JobR
     title: jobTitleOf(input),
     task: input.task,
     mode: input.mode,
+    workspaceMode: input.workspaceMode,
+    optionsJson: JSON.stringify(input.options),
     status: "queued" as const,
     baseBranch: input.baseBranch ?? project.defaultBranch,
     claudeMode: "sdk" as const,

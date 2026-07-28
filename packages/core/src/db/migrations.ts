@@ -55,4 +55,11 @@ CREATE INDEX idx_pending_actions_job ON pending_actions(job_id);
 CREATE INDEX idx_pending_actions_status ON pending_actions(status);
 `,
   },
+  {
+    name: "0002_job_input_columns",
+    sql: `
+ALTER TABLE jobs ADD COLUMN workspace_mode TEXT NOT NULL DEFAULT 'worktree';
+ALTER TABLE jobs ADD COLUMN options_json TEXT NOT NULL DEFAULT '{}';
+`,
+  },
 ];

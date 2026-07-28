@@ -78,11 +78,12 @@ export const JOB_STATUS_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
   waiting_permission: ["running", "failed", "cancel_requested", "expired", "orphaned"],
   waiting_input: ["running", "failed", "cancel_requested", "expired", "orphaned"],
   cancel_requested: ["cancelled", "failed"],
-  completed: [],
-  failed: [],
+  // completed/failedからrunningへは「追加指示」「再試行」でresumeする場合(§15.5, §15.6)
+  completed: ["running"],
+  failed: ["running"],
   cancelled: [],
   expired: [],
-  orphaned: [],
+  orphaned: ["failed"],
 };
 
 export function canTransition(from: JobStatus, to: JobStatus): boolean {
