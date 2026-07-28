@@ -1,0 +1,26 @@
+{
+  "name": "claude-remote-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @claude-remote/web dev",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @claude-remote/web start",
+    "doctor": "tsx scripts/doctor.ts",
+    "test": "pnpm -r test",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
+    "prettier": "^3.6.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.38.0"
+  }
+}
