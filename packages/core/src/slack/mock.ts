@@ -18,7 +18,8 @@ export type MockPost = {
     | "job_cancelled"
     | "awaiting_decision"
     | "permission_request"
-    | "permission_answered";
+    | "permission_answered"
+    | "local_session_idle";
   jobId: string;
   detail?: unknown;
 };
@@ -77,6 +78,14 @@ export class MockSlackBridge implements SlackBridge {
 
   async postAwaitingDecision(job: JobRow, latestMessage: string): Promise<void> {
     this.posts.push({ type: "awaiting_decision", jobId: job.id, detail: latestMessage });
+  }
+
+  async postLocalSessionIdle(
+    session: { name: string; cwd: string },
+    lastMessage: string | null,
+  ): Promise<void> {
+    this.posts.push({ type: "local_session_idle", jobId: session.name, detail: lastMessage });
+    log.info({ session: session.name }, "[mock slack] local session idle");
   }
 
   async postPermissionRequest(

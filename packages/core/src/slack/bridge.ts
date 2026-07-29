@@ -37,6 +37,12 @@ export interface SlackBridge {
   /** 応答終了(完了か質問待ちか不明)通知(§16.2) */
   postAwaitingDecision(job: JobRow, latestMessage: string): Promise<void>;
 
+  /** ローカルセッション(ターミナル起動)が入力待ちになった通知 */
+  postLocalSessionIdle(
+    session: { name: string; cwd: string },
+    lastMessage: string | null,
+  ): Promise<void>;
+
   /** 許可要求を通知しメッセージ参照を返す(§15.3) */
   postPermissionRequest(
     pendingActionId: string,
