@@ -105,6 +105,35 @@ pnpm launchagent:uninstall  # 解除
 
 ## 使い方
 
+### ターミナルから始めて、外出先のスマホで判断する
+
+`crm` CLIで起動したジョブは管理下ジョブになるため、**Macのターミナルで始めたタスクの許可・追加指示をスマホやSlackから行える**。
+
+```bash
+# 一度だけ: PATHへ登録
+ln -s /path/to/claude-remote-manager/bin/crm /usr/local/bin/crm
+
+# 対象リポジトリのディレクトリで(プロジェクトは自動判定)
+crm run "認証まわりのテストが落ちているので調査して直して"
+```
+
+ターミナルには進捗・Claudeのメッセージ・許可要求が流れる。そのまま外出してよい:
+
+- 許可要求 → スマホのWeb画面/Slackの「今回のみ許可」で回答すると、Macで実行が続行される
+- 判断・追加指示 → Slackの「追加修正」Modal、Webの追加指示欄、または `crm say "<指示>"`
+- ターミナルを閉じてもジョブは止まらない(`crm watch` で再表示、`crm list` で一覧)
+
+```text
+crm run <タスク>     ジョブ開始(--investigate 調査のみ / --test / --commit / --detach)
+crm say [id] <指示>  追加指示
+crm watch [id]       進捗表示
+crm allow / deny     許可要求への回答(ターミナル側から答える場合)
+crm stop [id]        停止
+crm list             一覧
+```
+
+### Web画面から始める
+
 1. **タスク開始**: Web画面 → 新しいタスク → プロジェクト選択 → 依頼内容入力 → 開始。専用worktreeが作られClaude Codeが起動、Slackに開始通知が届く
 2. **許可**: Claudeがツール実行許可を求めるとSlackに🔐通知。`今回のみ許可` / `拒否` / `詳細`。Slackが使えない時はWebのジョブ詳細画面からも回答できる。危険コマンド(sudo, rm -rf, force push等)には警告と確認ダイアログが付く
 3. **完了**: ✅通知。Webで結果要約・Git差分(ファイル単位、展開可)を確認
