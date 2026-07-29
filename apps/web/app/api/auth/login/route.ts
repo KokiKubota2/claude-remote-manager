@@ -17,9 +17,15 @@ export async function POST(request: NextRequest) {
   }
 
   const response = NextResponse.json({ ok: true });
+  // Secureはリクエストが実際にHTTPSのときだけ付ける。
+  // LAN内HTTP(Tailscale含む)でSecureを付けるとブラウザがCookieを破棄し、
+  // ログインが成功してもセッションが保存されずログイン画面へ戻ってしまう。
+  const isHttps =
+    request.nextUrl.protocol === "https:" ||
+    request.headers.get("x-forwarded-proto") === "https";
   response.cookies.set(SESSION_COOKIE_NAME, sessionValueOf(env.WEB_AUTH_TOKEN), {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
+    secure: isHttps,
     sameSite: "strict",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
