@@ -21,6 +21,7 @@ import type {
   SlackMessageRef,
 } from "./bridge";
 import { isAuthorizedSlackAction, isAuthorizedSlackUserOnly } from "./guard";
+import { NotificationOutbox } from "./outbox";
 
 const log = getLogger("slack-bridge");
 
@@ -164,13 +165,25 @@ export class SocketModeSlackBridge implements SlackBridge {
     });
 
     await this.app.start();
+    this.outbox.start();
     log.info("slack socket mode connected");
   }
 
   async stop(): Promise<void> {
+    this.outbox.stop();
     await this.app.stop();
   }
 
+  /** 送信失敗時に再送するライフサイクル通知用キュー(§21.1) */
+  private outbox = new NotificationOutbox(async (item) => {
+    await this.app.client.chat.postMessage({
+      channel: this.config.channelId,
+      blocks: item.blocks as never,
+      text: item.text,
+    });
+  });
+
+  /** 許可要求など、メッセージ参照が必要な即時投稿(キューしない) */
   private async postBlocks(blocks: Record<string, unknown>[]): Promise<SlackMessageRef | null> {
     try {
       const res = await this.app.client.chat.postMessage({
@@ -185,6 +198,11 @@ export class SocketModeSlackBridge implements SlackBridge {
     }
   }
 
+  /** ライフサイクル通知(失敗したらキューに積んで再送) */
+  private async postQueued(blocks: Record<string, unknown>[], text: string): Promise<void> {
+    await this.outbox.post({ blocks, text });
+  }
+
   private async postText(text: string): Promise<void> {
     try {
       await this.app.client.chat.postMessage({ channel: this.config.channelId, text });
@@ -194,23 +212,29 @@ export class SocketModeSlackBridge implements SlackBridge {
   }
 
   async postJobStarted(job: JobRow): Promise<void> {
-    await this.postBlocks(jobStartedBlocks(job, this.webBaseUrl));
+    await this.postQueued(jobStartedBlocks(job, this.webBaseUrl), "ジョブを開始しました");
   }
 
   async postJobCompleted(job: JobRow, resultText: string): Promise<void> {
-    await this.postBlocks(jobCompletedBlocks(job, resultText, this.webBaseUrl));
+    await this.postQueued(
+      jobCompletedBlocks(job, resultText, this.webBaseUrl),
+      "ジョブが完了しました",
+    );
   }
 
   async postJobFailed(job: JobRow, error: string): Promise<void> {
-    await this.postBlocks(jobFailedBlocks(job, error, this.webBaseUrl));
+    await this.postQueued(jobFailedBlocks(job, error, this.webBaseUrl), "ジョブが停止しました");
   }
 
   async postJobCancelled(job: JobRow): Promise<void> {
-    await this.postBlocks(jobCancelledBlocks(job));
+    await this.postQueued(jobCancelledBlocks(job), "ジョブを停止しました");
   }
 
   async postAwaitingDecision(job: JobRow, latestMessage: string): Promise<void> {
-    await this.postBlocks(awaitingDecisionBlocks(job, latestMessage, this.webBaseUrl));
+    await this.postQueued(
+      awaitingDecisionBlocks(job, latestMessage, this.webBaseUrl),
+      "Claudeが応答を終了しました",
+    );
   }
 
   async postPermissionRequest(
