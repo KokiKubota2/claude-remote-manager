@@ -253,6 +253,29 @@ export function permissionAnsweredBlocks(
   ];
 }
 
+export function localSessionIdleBlocks(
+  session: { name: string; cwd: string },
+  lastMessage: string | null,
+  webBaseUrl: string | null,
+): Block[] {
+  const blocks: Block[] = [
+    section(
+      `💤 *ローカルセッションが入力待ちになりました*\n\n*セッション*\n${display(session.name, 80)}\n\n*ディレクトリ*\n\`${display(session.cwd, 120)}\``,
+    ),
+  ];
+  if (lastMessage) {
+    blocks.push(section(`*最後のメッセージ*\n${display(lastMessage, 800)}`));
+  }
+  blocks.push(
+    context(
+      webBaseUrl
+        ? `<${webBaseUrl}/sessions|Webで一覧を見る> ・ 続きはターミナル、または \`claude remote-control\` で操作できます`
+        : "続きはターミナル、または `claude remote-control` で操作できます",
+    ),
+  );
+  return blocks;
+}
+
 export function instructionModalView(jobId: string): Record<string, unknown> {
   return {
     type: "modal",

@@ -82,6 +82,11 @@ export function getJob(db: Db, jobId: string): JobRow | null {
   return db.select().from(jobs).where(eq(jobs.id, jobId)).get() ?? null;
 }
 
+/** ClaudeセッションIDからジョブを引く(ローカルセッション一覧での管理ジョブ判定用) */
+export function getJobBySessionId(db: Db, sessionId: string): JobRow | null {
+  return db.select().from(jobs).where(eq(jobs.claudeSessionId, sessionId)).get() ?? null;
+}
+
 export function listJobs(
   db: Db,
   opts: { projectId?: string; statuses?: JobStatus[]; limit?: number } = {},

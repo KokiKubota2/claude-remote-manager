@@ -11,6 +11,7 @@ import {
   jobCompletedBlocks,
   jobFailedBlocks,
   jobStartedBlocks,
+  localSessionIdleBlocks,
   permissionAnsweredBlocks,
   permissionRequestBlocks,
 } from "./blocks";
@@ -234,6 +235,16 @@ export class SocketModeSlackBridge implements SlackBridge {
     await this.postQueued(
       awaitingDecisionBlocks(job, latestMessage, this.webBaseUrl),
       "Claudeが応答を終了しました",
+    );
+  }
+
+  async postLocalSessionIdle(
+    session: { name: string; cwd: string },
+    lastMessage: string | null,
+  ): Promise<void> {
+    await this.postQueued(
+      localSessionIdleBlocks(session, lastMessage, this.webBaseUrl),
+      "ローカルセッションが入力待ちになりました",
     );
   }
 

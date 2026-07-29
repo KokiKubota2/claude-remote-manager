@@ -80,6 +80,10 @@ export function jobManager(): JobManager {
         onPermissionDetails: (id) => broker.details(id),
       }),
     );
+    // ローカルセッション(ターミナル起動)のidle通知
+    void import("./local-sessions").then(({ startLocalSessionWatcher }) =>
+      startLocalSessionWatcher(),
+    );
     log.info({ adapter: adapter.kind, slack: slack.kind }, "job manager initialized");
   }
   return globalStore.__crmJobManager;

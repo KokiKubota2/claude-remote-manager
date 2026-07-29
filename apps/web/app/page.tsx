@@ -103,6 +103,9 @@ export default async function DashboardPage() {
           <Link href="/jobs" className="underline">
             すべてのジョブ
           </Link>
+          <Link href="/sessions" className="underline">
+            ローカルセッション
+          </Link>
         </nav>
 
         <p className="text-xs text-neutral-400">
