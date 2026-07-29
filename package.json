@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @claude-remote/web dev",
     "build": "pnpm -r build",
-    "start": "pnpm --filter @claude-remote/web start",
+    "start": "tsx scripts/start.ts",
     "doctor": "tsx scripts/doctor.ts",
     "test": "pnpm -r test",
     "lint": "eslint .",
