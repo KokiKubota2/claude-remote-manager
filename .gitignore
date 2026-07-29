@@ -13,3 +13,6 @@ logs/
 logs/*
 !logs/.gitkeep
 !data/.gitkeep
+test-results/
+playwright-report/
+e2e/.tmp/

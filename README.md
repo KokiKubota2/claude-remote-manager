@@ -147,6 +147,7 @@ Job Manager起動時に実行中扱いのジョブを検査する:
 
 ```bash
 pnpm test        # 単体・結合テスト(実gitリポジトリ・モックClaude使用)
+pnpm e2e         # Playwright E2E(iPhoneビューポート・mockアダプタ・要 playwright install)
 pnpm lint
 pnpm --filter @claude-remote/core typecheck
 CLAUDE_ADAPTER=mock pnpm dev   # Claudeなしで画面開発
@@ -154,6 +155,6 @@ CLAUDE_ADAPTER=mock pnpm dev   # Claudeなしで画面開発
 
 ## 実装状況(MVP)
 
-実装済み: Repository Registry / Web認証 / プロジェクト一覧 / 新規タスク / worktree作成 / Claude起動(Agent SDK) / ジョブ一覧・詳細 / Slack Socket Mode / 開始・完了・エラー通知 / 許可要求通知+許可・拒否ボタン(二重回答防止) / 追加指示Modal / ジョブ停止 / Git差分表示 / SQLite / LaunchAgent / doctor / 再起動復旧
+実装済み: Repository Registry / Web認証 / プロジェクト一覧 / 新規タスク / worktree作成 / Claude起動(Agent SDK) / ジョブ一覧・詳細 / Slack Socket Mode / 開始・完了・エラー通知 / 許可要求通知+許可・拒否ボタン(二重回答防止) / 追加指示Modal / ジョブ停止 / Git差分表示 / SQLite / LaunchAgent / doctor / 再起動復旧 / 画面の自動更新 / Playwright E2E / Slack切断時の通知キュー(ライフサイクル通知の再送)
 
-未実装(設計書 §26.2 の後回し項目): Playwright E2E / Slack切断時の通知キュー(現状はログ記録のみ) / 自動状態分類 / PR作成 / 音声入力 / Web Push / プロジェクトのWeb登録 ほか
+未実装(設計書 §26.2 の後回し項目): 自動状態分類 / PR作成 / 音声入力 / Web Push / プロジェクトのWeb登録 ほか
