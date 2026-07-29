@@ -1,0 +1,8 @@
+#!/bin/sh
+# Claude Remote CLI ラッパ。
+# どのディレクトリからでも実行できるよう、実行時のcwdを引き継いでtsxを起動する。
+# 例: ln -s <repo>/bin/crm /usr/local/bin/crm
+set -e
+SCRIPT_PATH=$(readlink -f "$0" 2>/dev/null || python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$0")
+REPO_DIR=$(dirname "$(dirname "$SCRIPT_PATH")")
+CRM_USER_CWD="$PWD" exec "$REPO_DIR/node_modules/.bin/tsx" "$REPO_DIR/scripts/crm.ts" "$@"

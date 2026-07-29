@@ -17,7 +17,8 @@
     "setup": "tsx scripts/setup.ts",
     "launchagent:install": "tsx scripts/install-launch-agent.ts",
     "launchagent:uninstall": "tsx scripts/uninstall-launch-agent.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "crm": "tsx scripts/crm.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
