@@ -2,10 +2,15 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 
-/** `~` 始まりのパスをホームディレクトリ展開したうえで絶対パス化する */
+/**
+ * `~` 始まりのパスをホームディレクトリ展開したうえで絶対パス化する。
+ * 相対パスは CRM_BASE_DIR(通常はリポジトリルート。起動側が設定)基準で解決する。
+ * Next.jsはapps/webをcwdとして動くため、process.cwd()だけに頼ると誤解決する。
+ */
 function expandPath(p: string): string {
   const expanded = p === "~" || p.startsWith("~/") ? path.join(os.homedir(), p.slice(1)) : p;
-  return path.resolve(expanded);
+  const base = process.env.CRM_BASE_DIR ?? process.cwd();
+  return path.resolve(base, expanded);
 }
 
 const envSchema = z.object({

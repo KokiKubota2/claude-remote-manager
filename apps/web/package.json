@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 127.0.0.1 -p 32146",
+    "dev": "sh -c 'next dev -H \"${WEB_HOST:-127.0.0.1}\" -p \"${WEB_PORT:-32146}\"'",
     "build": "next build",
-    "start": "next start -H 127.0.0.1 -p 32146",
+    "start": "sh -c 'next start -H \"${WEB_HOST:-127.0.0.1}\" -p \"${WEB_PORT:-32146}\"'",
     "typecheck": "tsc --noEmit",
     "test": "echo 'web: no unit tests (E2E is planned)' && exit 0"
   },
