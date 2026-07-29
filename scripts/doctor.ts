@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import { parseEnv, slackConfigOf } from "../packages/core/src/config/env";
+
+// リポジトリ直下の .env を読み込む(すでに設定済みの環境変数は上書きしない)
+try {
+  process.loadEnvFile(path.join(import.meta.dirname, "..", ".env"));
+} catch {
+  // .env がなければ環境変数のみで検証する
+}
 import { ProjectRegistry, resolveProjectPath } from "../packages/core/src/config/projects";
 import { openDb } from "../packages/core/src/db/client";
 
@@ -63,8 +71,13 @@ if (env) {
 
   // --- CLAUDE* env contamination (capability-report §14-1-5) ---
   warn("CLAUDE*環境変数", () => {
+    // 本システム自身の設定変数は混入とみなさない
+    const own = new Set(["CLAUDE_ADAPTER", "CLAUDE_COMMAND", "CLAUDE_JOB_MODEL"]);
     const contaminated = Object.keys(process.env).filter(
-      (k) => k === "CLAUDECODE" || k.startsWith("CLAUDE_"),
+      (k) =>
+        (k === "CLAUDECODE" || k.startsWith("CLAUDE_")) &&
+        !own.has(k) &&
+        !k.startsWith("CLAUDE_REMOTE_"),
     );
     if (contaminated.length > 0) {
       return `検出: ${contaminated.join(", ")} — Claude Code内から起動している可能性。ジョブ起動時はサニタイズされるが、常駐運用では通常のシェルから起動すること`;
