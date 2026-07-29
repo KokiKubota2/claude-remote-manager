@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listJobs } from "@claude-remote/core";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { JobStatusBadge } from "@/components/JobStatusBadge";
 import { NavBar } from "@/components/NavBar";
 import { requireAuthPage } from "@/lib/server/auth";
@@ -48,6 +49,7 @@ export default async function DashboardPage() {
     <div className="pb-28">
       <NavBar title="Claude Remote" />
       <main className="flex flex-col gap-6 p-4">
+        <AutoRefresh intervalMs={5000} enabled={active.length + waiting.length + queued.length > 0} />
         {waiting.length > 0 && (
           <section>
             <h2 className="mb-2 text-sm font-semibold text-amber-600">判断待ち</h2>

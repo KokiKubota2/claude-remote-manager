@@ -7,6 +7,7 @@ import {
   redactSecrets,
 } from "@claude-remote/core";
 import { PermissionPrompt, type PendingPermission } from "@/components/PermissionPrompt";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { JobStatusBadge } from "@/components/JobStatusBadge";
 import { NavBar } from "@/components/NavBar";
 import { JobActions } from "@/components/JobActions";
@@ -64,6 +65,17 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
     <div className="pb-8">
       <NavBar title={job.title} backHref="/" />
       <main className="flex flex-col gap-5 p-4">
+        <AutoRefresh
+          enabled={[
+            "queued",
+            "preparing",
+            "starting",
+            "running",
+            "waiting_permission",
+            "waiting_input",
+            "cancel_requested",
+          ].includes(job.status)}
+        />
         <PermissionPrompt pending={pendingPermissions} />
 
         <section className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
